@@ -1,0 +1,91 @@
+---
+title: "Assignment"
+author: "Pamina Lenggenhager"
+date: "2025-03-01"
+output: html_document
+--- 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment 2
+
+### Part 1: Loading the data and packages
+The mouse (Mus Musculus) EnsDb object, version 102, genome build GRCm38 <br>
+The mouse genome sequence ( dna_sm ) in TwoBit/2bit format for GRCm38 <br>
+The drosophila melanogaster genome sequence ( dna_sm ) in TwoBit/2bit format for BDGP6 <br>
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub) # to fetch genomes, annotations, etc.
+  library(ensembldb)     # to manipulate ensembl gene annotations
+  library(GenomicRanges) # data structure for genomic ranges 
+  library(epiwraps)      # visualization
+  library(rtracklayer)
+  library(ggplot2)
+})
+
+# mouse (Mus Musculus) EnsDb object, version 102, genome build GRCm38
+Ah <- AnnotationHub()
+query_results <- query(Ah, c("EnsDb", "Mus musculus", "102", "GRCm38"))
+query_results
+
+ensdb <- Ah[["AH89211"]]
+ensdb
+
+
+# mouse genome sequence ( dna_sm ) in TwoBit/2bit format for GRCm38
+query_results2 <- query(Ah, c("Mus musculus", "GRCm38", "TwoBit", "dna_sm"))
+query_results2
+
+dna_sm_m <- Ah[["AH49775"]]
+dna_sm_m
+
+
+# drosophila melanogaster genome sequence ( dna_sm ) in TwoBit/2bit format for BDGP6
+query_results3 <- query(Ah, c("drosophila melanogaster", "BDGP6", "TwoBit", "dna_sm"))
+query_results3
+
+dna_sm_d <- Ah[["AH49674"]]
+dna_sm_d
+
+```
+
+### Part 2: Working with data
+
+How many different ensembl gene IDs and gene symbols are there for protein-coding genes? <br>
+Plot the distribution of the (spliced) length of protein-coding transcripts
+
+
+```{r}
+protein_coding_genes <- genes(ensdb, filter = GeneBiotypeFilter("protein_coding"), 
+                              columns = c("gene_id", "gene_name"))
+protein_coding_genes
+
+
+num_unique_gene_ids <- length(unique(protein_coding_genes$gene_id))
+num_unique_gene_symbols <- length(unique(protein_coding_genes$gene_name))
+
+
+cat("Number of unique ensembl gene IDs:", num_unique_gene_ids, "\n")
+cat("Number of unique gene symbols:", num_unique_gene_symbols, "\n")
+
+```
+
+```{r}
+genes <- genes(ensdb)
+
+pcg <- genes[which(genes$gene_biotype == "protein_coding")]
+
+exsPerTx <- exonsBy(ensdb, by = "tx", filter = TxBiotypeFilter("protein_coding"))
+
+transcript_lengths <- sum(width(exsPerTx))
+
+df <- data.frame(Length = transcript_lengths)
+
+hist(df$Length, breaks = 50, col = "steelblue",
+     main = "Distribution of Spliced Transcript Lengths",
+     xlab = "Transcript Length", ylab = "Frequency")
+
+```
