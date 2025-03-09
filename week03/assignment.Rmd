@@ -1,0 +1,122 @@
+---
+title: "assignment"
+author: "Pamina Lenggenhager"
+date: "2025-03-08"
+output: html_document
+---
+
+# Assignment 2
+
+## Step 1
+
+Loading needed packages:
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(Rsubread)      # read alignment
+  library(rtracklayer)   # read/write genomic file formats
+  library(Biostrings)    # handling sequences
+  library(Rfastp)        # read QC/trimming
+  library(epiwraps)
+  library(ensembldb)     # to manipulate ensembl gene annotations
+  library(GenomicRanges)
+})
+
+ah <- AnnotationHub()
+```
+
+Download the Drosophila ChIP-seq for the protein CTCF
+
+```{r}
+dir.create("raw")
+download.file("https://www.encodeproject.org/files/ENCFF127RRR/@@download/ENCFF127RRR.fastq.gz", "raw/ttk.fastq.gz", mode="wb")
+```
+
+## Step 2
+
+Process it from the raw data, obtaining: bam file
+
+```{r}
+dir.create("rfastp.trimmed")
+qc <- lapply(c(ttk="raw/ttk.fastq.gz"), FUN=function(x){
+  Rfastp::rfastp(x, thread=4, overrepresentationAnalysis=TRUE,
+                 outputFastq=file.path("rfastp.trimmed/",gsub("\\.fastq\\.gz$","",basename(x))))
+})
+
+genome <- ah[["AH49674"]]
+dir.create("Drosophila_genome")
+
+export(import.2bit(genome), "Drosophila_genome/genome.fasta.gz", compress=TRUE)
+
+Rsubread::buildindex("Drosophila_genome/rsubread",
+                     reference="Drosophila_genome/genome.fasta.gz")
+
+dir.create("aligned")
+align.stats <- Rsubread::align(index="Drosophila_genome/rsubread", type="dna",
+                               readfile1=c("rfastp.trimmed/ttk_R1.fastq.gz"),
+                               output_file=c("aligned/ttk.bam"),
+                               nthreads=6, sortReadsByCoordinates=TRUE)
+align.stats
+```
+
+Process it from the raw data, obtaining: peaks
+
+```{r}
+peaks <- callPeaks(bam="aligned/ttk.bam")
+```
+
+## Step 3
+
+Checking if the peaks are inside a gene
+
+```{r}
+q <- query(ah, c("Drosophila", "TxDb"))
+q
+
+txdb <- ah[["AH84134"]]
+genes <- genes(txdb)
+
+# Check chromosome names in peaks and genes and match them
+seqlevels(peaks)
+seqlevels(genes)
+seqlevelsStyle(genes) <- seqlevelsStyle(peaks) 
+
+overlaps <- findOverlaps(genes, peaks)
+overlapping_genes <- genes[queryHits(overlaps)]
+peaks_inside_genes <- peaks[subjectHits(overlaps)]
+
+peaks_inside_genes
+```
+
+Plotting the signal around one of the peaks that is located inside a gene
+
+```{r}
+peaks[5]
+
+plotSignalTracks(list(ttk="aligned/ttk.bam"), region=peaks[5], extend=25000)
+
+plotSignalTracks(list(ttk="aligned/ttk.bam", peaks=peaks), region=peaks[5],
+                 extend=25000, tracks.params=list(ylim=c(0,50)))
+```
+
+## Step 4
+
+Report findings
+
+```{r}
+reads <- align.stats[1,1]
+
+mapped <- align.stats[2,1]
+
+mapped_percentage <- mapped/reads*100
+
+peak_count <- length(peaks)
+peak_inside_genes_count <- length(peaks_inside_genes)
+
+
+cat("Number of total reads: ", reads, "\n")
+cat(mapped_percentage, "% of all reads were mapped", "\n")
+cat(peak_count, "peaks were found", "\n")
+cat(peak_inside_genes_count, "peaks were found inside a gene", "\n")
+```
