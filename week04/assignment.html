@@ -406,8 +406,8 @@ download.file(&quot;https://www.encodeproject.org/files/ENCFF274UIB/@@download/E
 
 download.file(&quot;https://www.encodeproject.org/files/ENCFF008XKX/@@download/ENCFF008XKX.bed.gz&quot;, &quot;H3K27me3.bed.gz&quot;)</code></pre>
 </div>
-<div id="overlap-clculations" class="section level3">
-<h3>Overlap clculations</h3>
+<div id="overlap-calculations" class="section level3">
+<h3>Overlap calculations</h3>
 <pre class="r"><code># Getting the peaks of p300 and each histone modifications
 peaks_p300 &lt;- rtracklayer::import(&quot;p300.bed.gz&quot;, format = &quot;narrowPeak&quot;)
 export(peaks_p300, &quot;peaks/p300.narrowPeak&quot;, format = &quot;narrowPeak&quot;)

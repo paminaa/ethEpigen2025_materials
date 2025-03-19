@@ -7,6 +7,7 @@ date: "2025-03-19"
 ## Assignment 4
 
 ### Downloading all necessary files
+
 ```{r}
 library(rtracklayer)
 
@@ -22,7 +23,8 @@ download.file("https://www.encodeproject.org/files/ENCFF274UIB/@@download/ENCFF2
 download.file("https://www.encodeproject.org/files/ENCFF008XKX/@@download/ENCFF008XKX.bed.gz", "H3K27me3.bed.gz")
 ```
 
-### Overlap clculations
+### Overlap calculations
+
 ```{r}
 # Getting the peaks of p300 and each histone modifications
 peaks_p300 <- rtracklayer::import("p300.bed.gz", format = "narrowPeak")
@@ -55,6 +57,7 @@ percentages_H3K27me3 <- (overlap_H3K27me3 / total_p300) * 100
 ```
 
 ### Overlap report
+
 ```{r}
 cat("Proportion of p300 peaks overlapping with histone marks:\n")
 cat(sprintf("H3K4me3: %.2f%%\n", percentages_H3K4me3))
