@@ -1,0 +1,85 @@
+---
+title: "assignment"
+output: html_document
+date: "2025-03-23"
+---
+
+# Assignment 5
+
+## Bivalent domains from human ESC
+
+### Downloading all necessary files
+```{r}
+library(rtracklayer)
+
+dir.create("peaks")
+
+download.file("https://www.encodeproject.org/files/ENCFF742FZZ/@@download/ENCFF742FZZ.bed.gz", "H3K4me3.bed.gz")
+download.file("https://www.encodeproject.org/files/ENCFF218TIK/@@download/ENCFF218TIK.bed.gz", "H3K27me3.bed.gz")
+
+H3K4me3 <- rtracklayer::import("H3K4me3.bed.gz", format = "narrowPeak")
+export(H3K4me3, "peaks/H3K4me3.narrowPeak", format = "narrowPeak")
+
+H3K27me3 <- rtracklayer::import("H3K27me3.bed.gz", format = "narrowPeak")
+export(H3K27me3, "peaks/H3K27me3.narrowPeak", format = "narrowPeak")
+```
+
+### Identifying bivalent domains ESC
+```{r}
+esc_overlaps <- findOverlaps(H3K4me3, H3K27me3, type = "any")
+
+bivalent_H3K4me3 <- H3K4me3[queryHits(esc_overlaps)]
+bivalent_H3K27me3 <- H3K27me3[subjectHits(esc_overlaps)]
+
+bivalent_domains_ESC <- reduce(c(bivalent_H3K4me3, bivalent_H3K27me3))
+```
+
+
+## Bivalent domains from human fibroblast in breast tissue
+
+### Downloading all necessary files
+```{r}
+download.file("https://www.encodeproject.org/files/ENCFF239ZNV/@@download/ENCFF239ZNV.bed.gz", "H3K4me3_fibroblast.bed.gz")
+download.file("https://www.encodeproject.org/files/ENCFF348PIK/@@download/ENCFF348PIK.bed.gz", "H3K27me3_fibroblast.bed.gz")
+
+H3K4me3_f <- rtracklayer::import("H3K4me3_fibroblast.bed.gz", format = "narrowPeak")
+export(H3K4me3_f, "peaks/H3K4me3_fibroblast.narrowPeak", format = "narrowPeak")
+
+H3K27me3_f <- rtracklayer::import("H3K27me3_fibroblast.bed.gz", format = "narrowPeak")
+export(H3K27me3_f, "peaks/H3K27me3_f.narrowPeak", format = "narrowPeak")
+```
+
+### Identifying bivalent domains ESC
+```{r}
+# Overlap with H3K4me3 fibroblast
+ov_H3K4me3_f <- overlapsAny(bivalent_domains_ESC, H3K4me3_f)
+
+# Overlap with H3K27me3 fibroblast
+ov_H3K27me3_f <- overlapsAny(bivalent_domains_ESC, H3K27me3_f)
+
+ov_both_diff <- ov_H3K4me3_f & ov_H3K27me3_f
+ov_either_diff <- ov_H3K4me3_f | ov_H3K27me3_f
+n_total <- length(bivalent_domains_ESC)
+```
+
+### Results
+```{r}
+cat("Analysis of mESC bivalent domains in differentiated fibroblasts:\n")
+cat(sprintf("- Total bivalent domains in mESCs: %d\n", n_total))
+
+cat(sprintf("- Overlapping H3K4me3 in fibroblasts: %d (%.1f%%)\n",
+            sum(ov_H3K4me3_f), 100 * mean(ov_H3K4me3_f)))
+
+cat(sprintf("- Overlapping H3K27me3 in fibroblasts: %d (%.1f%%)\n",
+            sum(ov_H3K27me3_f), 100 * mean(ov_H3K27me3_f)))
+
+cat(sprintf("- Overlapping BOTH marks in fibroblasts: %d (%.1f%%)\n",
+            sum(ov_both_diff), 100 * mean(ov_both_diff)))
+
+cat(sprintf("- Overlapping EITHER mark in fibroblasts: %d (%.1f%%)\n",
+            sum(ov_either_diff), 100 * mean(ov_either_diff)))
+
+cat(sprintf("- Overlapping NEITHER mark in fibroblasts: %d (%.1f%%)\n",
+            n_total - sum(ov_either_diff),
+            100 * (1 - mean(ov_either_diff))))
+```
