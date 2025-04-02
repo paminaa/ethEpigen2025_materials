@@ -1,0 +1,78 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-04-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment 6
+
+### Loading Data and packages
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(GenomicRanges)
+  library(ggplot2)
+  library(motifmatchr) 
+  library(Biostrings) 
+  library(MotifDb) 
+  library(TFBSTools) 
+  library(universalmotif) 
+  library(PWMEnrich) 
+})
+
+download.file("https://www.encodeproject.org/files/ENCFF368VWJ/@@download/ENCFF368VWJ.bed.gz", "mouse_REST.bed.gz")
+peaks <- rtracklayer::import("mouse_REST.bed.gz", format="NarrowPeak")
+seqlevelsStyle(peaks) <- "Ensembl" 
+peaks_chr1 <- peaks[seqnames(peaks)=="1"]
+
+ah <- AnnotationHub()
+
+genome <- ah[["AH68356"]]
+genome_seqs <- import(genome)
+```
+
+
+### Motif scanning chr1
+```{r}
+motifs <- query(MotifDb, "REST", "Mmusculus")
+names(motifs)
+motif <- motifs[["Mmusculus-HOCOMOCOv10-REST_MOUSE.H10MO.A"]]
+motif
+
+view_motifs(motif)
+
+
+Biostrings::writeXStringSet(genome_seqs, "genome.fa")
+motif2 <- convert_motifs(motif, class="TFBSTools-PWMatrix")
+moi <- motifmatchr::matchMotifs(motif2, subject=peaks_chr1,
+                                genome=Rsamtools::FaFile("genome.fa"),
+                                out="positions")
+moi <- moi[[1]] 
+head(moi)
+
+table(overlapsAny(peaks_chr1, moi))
+```
+
+
+### Report
+```{r}
+num_peaks <- length(peaks_chr1)
+peaks_with_motif <- subsetByOverlaps(peaks_chr1, moi)
+num_peaks_with_motif <- length(unique(peaks_with_motif))
+pct <- 100 * num_peaks_with_motif / num_peaks
+
+num_motif_hits <- length(moi)
+motifs_with_peak <- subsetByOverlaps(moi, peaks_chr1)
+num_motifs_with_peak <- length(unique(motifs_with_peak))
+pct2 <- 100 * num_motifs_with_peak / num_motif_hits
+
+
+cat(sprintf("Of the %d peaks, %d (%.2f%%) contain a motif for REST in Chr1.\n", 
+            num_peaks, num_peaks_with_motif, pct))
+cat(sprintf("Of the %d motif instances, %d (%.2f%%) overlap a peak in Chr1.\n", 
+            num_motif_hits, num_motifs_with_peak, pct2))
+```
