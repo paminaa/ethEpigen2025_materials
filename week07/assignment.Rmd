@@ -1,0 +1,94 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-04-10"
+---
+
+## Assignment 7
+
+### Loading packages and data
+```{r }
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(AnnotationHub)
+  library(MotifDb)
+  library(memes)
+  library(universalmotif)
+  library(ensembldb)
+  library(ggplot2)
+  library(ATACseqQC)
+})
+
+ah <- AnnotationHub()
+
+download.file("https://ethz-ins.org/content/w7/atac.chr19.bam", "atac.chr19.bam", mode="wb")
+download.file("https://ethz-ins.org/content/w7/atac.chr19.bam.bai", "atac.chr19.bam.bai", mode="wb")
+```
+
+### Preparing tracks
+```{r}
+bam <- "atac.chr19.bam"
+
+# create a track using all fragments, computing the coverage at each position (and force Ensembl naming)
+epiwraps::bam2bw(bam, output_bw = "full_cov.bw", paired=TRUE, binWidth=10L, forceSeqlevelsStyle = "Ensembl")
+
+# create a track using all fragments, but computing the number of cuts/insertion sites at each position
+epiwraps::bam2bw(bam, output_bw = "full_cuts.bw", paired=TRUE, binWidth=1L, type="ends", 
+                 trim=4L, extend=3L, forceSeqlevelsStyle = "Ensembl")
+
+# create a track using only nucleosome-free fragments, computing coverage
+epiwraps::bam2bw(bam, output_bw = "NF_cov.bw", paired=TRUE, binWidth=5L, minFragLength=30, 
+       maxFragLength=120, forceSeqlevelsStyle = "Ensembl")
+
+# create a track using only nucleosome-free fragments, the number of cuts/insertion sites at each position
+epiwraps::bam2bw(bam, output_bw = "NF_cuts.bw", paired=TRUE, binWidth=1L, type="ends", minFragLength=30, 
+       maxFragLength=120, trim=4L, extend=3L, forceSeqlevelsStyle = "Ensembl")
+
+# create a track using only mono-nucleosome fragments, computing coverage
+epiwraps::bam2bw(bam, output_bw = "mono_cov.bw", paired=TRUE, binWidth=10L, minFragLength=140,
+       maxFragLength=220, forceSeqlevelsStyle = "Ensembl")
+
+# create a track using only the (10bp) centers of mono-nucleosome fragments
+epiwraps::bam2bw(bam, output_bw = "mono_centers.bw", paired=TRUE, binWidth=5L, minFragLength=140, trim=4L,
+       maxFragLength=220, type="center", extend=10L, forceSeqlevelsStyle = "Ensembl")
+```
+
+###  Obtaining the sites with a KLF4/MAZ motif
+```{r}
+genome <- ah[["AH68356"]]
+chr19 <- import(genome)["19"]
+
+query(MotifDb, c("KLF4", "Hsapiens"))
+
+motif_KLF4 <- MotifDb::query(MotifDb, c("KLF4","Hsapiens"))[[1]]
+motif_KLF4_2 <- convert_motifs(motif_KLF4, class="TFBSTools-PFMatrix")
+
+moi_KLF4 <- motifmatchr::matchMotifs(motif_KLF4_2, chr19, out="positions", p.cutoff=1e-5)[[1]]
+moi_KLF4 <- as(setNames(moi_KLF4,names(chr19)), "GRanges")
+
+
+query(MotifDb, c("MAZ", "Hsapiens"))
+
+motif_MAZ <- MotifDb::query(MotifDb, c("MAZ","Hsapiens"))[[1]]
+motif_MAZ_2 <- convert_motifs(motif_MAZ, class="TFBSTools-PFMatrix")
+
+moi_MAZ <- motifmatchr::matchMotifs(motif_MAZ_2, chr19, out="positions", p.cutoff=1e-5)[[1]]
+moi_MAZ <- as(setNames(moi_MAZ, names(chr19)), "GRanges")
+```
+
+### Plotting signal around the KLF4 motif occurrences
+```{r}
+tracks <- list.files(pattern="bw$")
+names(tracks) <- gsub("\\.bw","",basename(tracks))
+
+sm_KLF4 <- signal2Matrix(tracks, moi_KLF4, w=5, extend=300)
+
+plotEnrichedHeatmaps(sm_KLF4, trim=0.95, multiScale = TRUE, axis_name = "0")
+```
+
+### Plotting signal around the MAZ motif occurrences
+```{r}
+sm_MAZ <- signal2Matrix(tracks, moi_MAZ, w=5, extend=300)
+
+plotEnrichedHeatmaps(sm_MAZ, trim=0.95, multiScale = TRUE, axis_name = "0")
+```
