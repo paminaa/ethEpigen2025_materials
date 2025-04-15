@@ -1,0 +1,117 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-04-15"
+---
+
+## Assignment 8
+
+### Loading packages and data
+```{r}
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(motifmatchr)
+  library(MotifDb)
+  library(universalmotif)
+  library(ggplot2)
+  library(SummarizedExperiment) 
+  library(sechm) 
+  library(BiocParallel) 
+  library(chromVAR) 
+  library(limma) 
+  library(Rsamtools)
+  library(BSgenome.Mmusculus.UCSC.mm10)
+})
+
+register(SnowParam(2))
+
+download.file("https://ethz-ins.org/content/mouse_mm38_hippocampus.peakCounts.SE.rds", "mouse_mm38_hippocampus.peakCounts.SE.rds", mode="wb")
+se <- readRDS("mouse_mm38_hippocampus.peakCounts.SE.rds")
+
+genome <- BSgenome.Mmusculus.UCSC.mm10
+```
+
+### Preparing the data
+```{r}
+colData(se)
+
+sample_names <- rownames(colData(se))
+condition <- ifelse(grepl("^Control", sample_names), "Control", "FSS")
+sex <- ifelse(grepl("_female_", sample_names), "female", "male")
+colData(se)$condition <- condition
+colData(se)$sex <- sex
+
+colData(se)
+
+seqlevels(se)
+seqlevels(se) <- paste0("chr", seqlevels(se))
+se <- chromVAR::addGCBias(se, genome = genome) # adding the GC bias
+```
+
+## Get the database of motifs
+```{r}
+query(MotifDb, c("Mmusculus", "HOCOMOCOv10"))
+motifs <- query(MotifDb, c("Mmusculus", "HOCOMOCOv10"))
+
+motifs <- do.call(TFBSTools::PWMatrixList, setNames(
+           universalmotif::convert_motifs(motifs, class="TFBSTools-PWMatrix"),
+           mcols(motifs)$geneSymbol))
+motifs
+```
+
+### Matching motifs to peaks
+```{r}
+moi <- motifmatchr::matchMotifs(motifs, subject=se, genome=genome)
+head(assay(moi))
+```
+
+### Generating background peaks + deviations
+```{r}
+set.seed(1234)
+bg <- chromVAR::getBackgroundPeaks(se, niterations=500)
+dev <- chromVAR::computeDeviations(object = se, annotations=moi,
+                                   background_peaks=bg)
+
+dev$condition
+dev$condition <- factor(dev$condition)
+
+mm <- model.matrix(~condition, data=as.data.frame(colData(dev)))
+```
+
+### FSS vs. control analysis
+```{r}
+fit_stress <- limma::eBayes(limma::lmFit(assay(dev, "z"), design = mm))
+res_stress <- limma::topTable(fit_stress, coef = "conditionFSS", number = Inf)
+
+unique_names <- make.unique(rownames(assay(dev, "z")))
+rownames(res_stress) <- unique_names
+head(res_stress)
+
+metadata(dev)$anno_colors <- list(condition = c(Control = "lightgrey", FSS = "darkred"),
+                                  sex = c(male = "#6699cc", female = "#ff99cc"))
+
+sechm::sechm(dev, features = head(rownames(res_stress)), assayName = "z", top_annotation = c("condition", "sex"))
+```
+
+Report FSS vs. control: 
+
+The heatmap highlights the top motifs with differential accessibility between FSS and Control animals. Notably, the ANDR (androgen receptor) motif shows a strong and consistent increase in accessibility in FSS samples (shown in bright yellow), with an adjusted p-value of 0.0016, indicating a statistically significant stress-induced chromatin remodeling at hormone-responsive elements. The AIRE motif also appears more accessible in FSS samples, with an adjusted p-value of 0.0188, potentially reflecting stress-related modulation of immune-related transcriptional programs. While motifs such as AP2A, AP2B, and ALX1 also showed elevated accessibility in some FSS samples, their adjusted p-values were not statistically significant. This suggests possible biological relevance, though further validation would be needed. Overall, the motif accessibility pattern visualized in the heatmap supports the idea that acute stress exposure reshapes chromatin accessibility at hormone and immune-related regulatory sites in the hippocampus.
+
+### Male vs. female analysis
+```{r}
+dev$sex <- factor(dev$sex, levels = c("male", "female"))
+mm_sex <- model.matrix(~sex, data = as.data.frame(colData(dev)))
+
+fit_sex <- limma::eBayes(limma::lmFit(assay(dev, "z"), mm_sex))
+res_sex <- limma::topTable(fit_sex, coef = "sexfemale", number = Inf)
+
+unique_names <- make.unique(rownames(assay(dev, "z")))
+rownames(res_sex) <- unique_names
+head(res_sex)
+
+sechm::sechm(dev, features = head(rownames(res_sex)), assayName = "z", top_annotation = c("condition", "sex"))
+```
+
+Report male vs. female: 
+
+The heatmap highlights motifs with the strongest differential accessibility between male and female animals. Notably, the AHR motif shows a substantial increase in accessibility in male samples (blue), with an adjusted p-value of 0.00000295, and the AIRE motif follows closely with a value of 0.000195. The ANDR motif (androgen receptor) is significantly more accessible in males, consistent with known hormone-driven regulatory differences, with an adjusted p-value of 0.00472. Additional motifs such as ALX1, AP2A, and AP2B also show sex-specific accessibility differences, all with adjusted p-values under 0.025, suggesting broader transcriptional network variations between male and female hippocampus. These findings reflect a robust epigenetic signature of sex differences at key transcription factor binding motifs involved in hormone signaling and transcriptional regulation.
