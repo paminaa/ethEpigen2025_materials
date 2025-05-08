@@ -1,0 +1,30 @@
+---
+title: "Assignment 9"
+output: html_document
+date: "2025-05-07"
+---
+
+### 1. Group members and topic
+Group members:
+
+- Andrea Brun
+- Nils Schlatter
+- Pamina Lenggenhager
+
+Topic:
+What are the differences in DNA accessibility between excitatory pyramidal neurons and inhibitory neurons? (suggested in lecture)
+
+
+### 2. Data
+- Single-nucleus ATAC-seq
+- Mouse data from Encode
+- Excitatory and inhibitory neuron data to compare, same lab
+- snATAC pseudobulk for mouse brain excitatory neuron in adult/child: https://www.encodeproject.org/annotations/ENCSR654UCD/
+- snATAC pseudobulk for mouse brain excitatory neuron in embryo/postnatal: https://www.encodeproject.org/annotations/ENCSR899TQA/
+- snATAC pseudobulk for ENCSR482ORB inhibitory neuron: https://www.encodeproject.org/annotations/ENCSR467SUB/
+
+
+### 3. Analysis
+- Linear model
+- Comparison of histone modifications across all three settings (excitatory young, excitatory old and inhibitory)
+- Comparison of motifs across the whole genomes for the three settings 
