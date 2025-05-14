@@ -1,0 +1,84 @@
+---
+title: "Assignment 11"
+output: html_document
+date: "2025-05-14"
+---
+
+## Loading packages and data
+```{r}
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(rtracklayer)
+  library(epiwraps)
+  library(ggplot2)
+  library(rGREAT) # Gene Ontology enrichment among genomic regions
+})
+
+download.file("https://ethz-ins.org/content/w10.assignment.zip", "assignment_data.zip")
+unzip("assignment_data.zip")
+list.files()
+```
+
+## Preparing the regions/tracks and plotting
+```{r}
+peak_files <- list.files(pattern = "bed$")
+peaks <- lapply(peak_files, rtracklayer::import.bed)
+
+peaks <- lapply(peaks, function(x) x[x$score > 800])
+
+regions <- reduce(unlist(GRangesList(peaks)))
+
+tracks <- list.files(pattern = "bw$")
+
+ese <- signal2Matrix(tracks, regions, extend = 2000)
+plotEnrichedHeatmaps(ese)
+```
+
+## Clustering
+```{r}
+set.seed(123)
+cl <- clusterSignalMatrices(ese, k=4)
+table(cl)
+head(cl)
+length(cl)
+length(regions)
+
+rowData(ese)$cluster <- cl
+head(rowData(ese))
+
+mycolors <- c("1" = "red", "2" = "blue", "3" = "darkgreen", "4" = "black")
+plotEnrichedHeatmaps(ese,row_split = "cluster", mean_color = mycolors)
+```
+
+### Report
+Clustering of the ChIP-seq signal matrix for Creb1, Creb3, and Creb3L1 revealed four distinct groups of genomic regions with characteristic transcription factor binding patterns. Cluster 1 (red) showed the strongest binding from Creb1, with additional signal from Creb3 and Creb3L1, suggesting these regions are primarily regulated by Creb1 with potential co-binding by the other two TFs. Cluster 2 (blue) displayed signal from all three TFs, with Creb3 as the dominant factor, indicating regions under possible combinatorial regulation where Creb3 plays a central role. Cluster 3 (green) exhibited strong, specific signal for Creb3 alone, with negligible binding by Creb1 or Creb3L1, representing a set of uniquely Creb3-regulated sites. Cluster 4 (black) showed clear co-binding of Creb1 and Creb3L1, while Creb3 signal was largely absent, pointing to selective co-regulation between these two TFs. Overall, the clustering analysis highlights both overlapping and distinct binding preferences among CREB-family transcription factors, consistent with their diverse roles in gene regulation.
+
+
+## Enrichment analysis
+```{r}
+split_regions <- split(rowRanges(ese), rowData(ese)$cluster)
+lengths(split_regions)
+
+res <- great(split_regions[["1"]], gene_sets="GO:BP", tss_source="hg38", 
+             background=regions, cores=2)
+bp <- getEnrichmentTables(res)
+head(bp)
+
+ggplot(head(bp, 15), aes(
+  fold_enrichment,
+  reorder(description, p_adjust),
+  size = observed_region_hits,
+  color = -log10(p_adjust)
+)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  labs(
+    x = "Fold Enrichment",
+    y = "GO Term",
+    title = "Top Enriched GO:BP Terms in Cluster 1"
+  )
+
+```
+
+### Report
+GO enrichment analysis of Cluster 1, which showed strong co-binding from all three CREB-family transcription factors (Creb1, Creb3, and Creb3L1), revealed significant enrichment for biological processes related to neural development. The most meaningful terms—based on a combination of fold enrichment, statistical significance, and number of associated regions—included “neurogenesis”, “neuron differentiation”, and “nervous system development”. These terms were moderately enriched (fold enrichment ~1.3–1.4), statistically significant (adjusted p-values < 0.01), and involved a large number of genomic regions. Additional relevant terms such as “cellular component morphogenesis” and “cell differentiation” also appeared, indicating involvement in structural and lineage-specifying programs, though with slightly lower fold enrichment or fewer supporting regions. In contrast, terms like “cell motility” and “multicellular organismal process”, despite being present, showed weaker statistical support and may be less directly related to CREB TF co-binding in this context. Overall, these findings support the role of CREB-family TFs in regulating neuronal and developmental gene expression programs.
