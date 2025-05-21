@@ -1,0 +1,98 @@
+---
+title: "Assignment 11"
+output: html_document
+date: "2025-05-20"
+---
+
+### Downloading packages and data
+```{r}
+suppressPackageStartupMessages({
+  library(BiocParallel)
+  library(bsseq)   
+  library(DMRcate)
+  library(rGREAT)
+  library(knitr)
+  library(pheatmap)
+  library(kableExtra)
+})
+
+dmrs <- readRDS("dmr.rds")
+bs <- readRDS("ESC_astrocytes_BSseq.rds")
+```
+
+### Top 5 DMR regions located on chr1
+```{r, warning=FALSE, message=FALSE}
+dmrs_chr1 <- dmrs[seqnames(dmrs) == "chr1"]
+
+top5_chr1 <- dmrs_chr1[order(abs(dmrs_chr1$meandiff), decreasing = TRUE)][1:5]
+top5_chr1
+
+bs <- bs[rowSums(assay(bs,"Cov") > 0) == ncol(bs), ]
+bs <- BSmooth(bs, BPPARAM = MulticoreParam(4))
+
+meth_top5 <- getMeth(bs, regions = top5_chr1, what = "perRegion")
+rownames(meth_top5) <- paste0("DMR_", seq_len(nrow(meth_top5)))
+meth_top5
+
+pheatmap(meth_top5, cluster_rows = FALSE, cluster_cols = TRUE, main = "Methylation in Top 5 chr1 DMRs", color = colorRampPalette(c("blue", "white", "red"))(100))
+```
+
+### Enrichment analysis
+```{r gene_table_display, results='asis'}
+job <- submitGreatJob(dmrs, species = "hg19")
+enrich_tables <- getEnrichmentTables(job, download_by = "tsv")
+go_bp <- enrich_tables$`GO Biological Process`
+
+top5_rows <- head(go_bp, 5)
+gene_table <- data.frame(Gene = character(), 
+                         GO_Term = character(),
+                         FoldEnrichment = numeric(), 
+                         FDR = numeric(),
+                         stringsAsFactors = FALSE)
+
+for (i in 1:nrow(top5_rows)) {
+  genes <- unlist(strsplit(top5_rows$Genes[i], ","))
+  for (gene in genes) {
+    gene_table <- rbind(gene_table, data.frame(
+      Gene = gene,
+      GO_Term = top5_rows$Desc[i],
+      FoldEnrichment = top5_rows$RegionFoldEnrich[i],
+      FDR = top5_rows$BinomFdrQ[i]
+    ))
+  }
+}
+
+knitr::kable(gene_table, caption = "Genes from Top 5 Enriched GO Biological Processes")
+```
+**Associated Genes for Each Term:**
+
+1. **Regulation of cellular ketone metabolic process...**  
+   → `NCOR2, PPARA`
+
+2. **Regulation of somitogenesis**  
+   → `CDX1, DLL1, DMRT2, LFNG, NKD1, NOTCH1, NRARP`
+
+3. **Lobar bronchus development**  
+   → `ADAMTSL2, HOXA5, WNT7B`
+
+4. **Outer medullary collecting duct development**  
+   → `WNT7B`
+
+5. **Establishment or maintenance of polarity of embryonic epithelium**  
+   → `WNT7B`
+
+
+### Interpretation of Enrichment Analysis
+
+We used the `rGREAT` package to perform a functional enrichment analysis on the differentially methylated regions (DMRs) identified between embryonic stem cells (ESCs) and astrocytes. 
+
+This analysis tests whether our DMRs are located near genes associated with specific Gene Ontology (GO) Biological Processes **more often than would be expected by chance**, compared to the entire genome. The goal is to determine if these DMRs are functionally biased toward certain biological functions.
+
+The top enriched GO terms included:
+- **Regulation of somitogenesis**
+- **Lobar bronchus development**
+- **Establishment or maintenance of polarity of embryonic epithelium**
+
+All five top terms had very high region fold enrichment (e.g. up to 37x) and false discovery rates (FDR) of 0, indicating strong statistical significance. These terms are consistent with gene regulation events during **early development and differentiation**, supporting the biological relevance of the methylation changes observed between pluripotent and differentiated cell types.
+
+Notably, genes such as **WNT7B**, **NOTCH1**, and **PPARA** were implicated, aligning with known roles in developmental signaling and cell fate determination.
